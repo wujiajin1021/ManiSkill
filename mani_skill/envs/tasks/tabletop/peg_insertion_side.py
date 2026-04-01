@@ -7,6 +7,9 @@ import torch
 from mani_skill.agents.robots.panda import PandaWristCam
 from mani_skill.envs.sapien_env import BaseEnv
 from mani_skill.envs.scene import ManiSkillScene
+from mani_skill.envs.tasks.tabletop.camera_config_utils import (
+    build_tabletop_base_camera_pose,
+)
 from mani_skill.envs.utils import randomization
 from mani_skill.sensors.camera import CameraConfig
 from mani_skill.utils import common, sapien_utils
@@ -95,8 +98,8 @@ class PegInsertionSideEnv(BaseEnv):
 
     @property
     def _default_sensor_configs(self):
-        pose = sapien_utils.look_at([0, -0.3, 0.2], [0, 0, 0.1])
-        return [CameraConfig("base_camera", pose, 128, 128, np.pi / 2, 0.01, 100)]
+        pose = build_tabletop_base_camera_pose(__file__, self.num_envs)
+        return [CameraConfig("base_camera", pose, 832, 480, np.pi / 2, 0.01, 30)]
 
     @property
     def _default_human_render_camera_configs(self):
@@ -118,7 +121,6 @@ class PegInsertionSideEnv(BaseEnv):
                 * (lengths - radii)[:, None]
                 * self._batched_episode_rng.uniform(-1, 1, size=(2,))
             )
-
             # save some useful values for use later
             self.peg_half_sizes = common.to_tensor(np.vstack([lengths, radii, radii])).T
             peg_head_offsets = torch.zeros((self.num_envs, 3))

@@ -8,6 +8,9 @@ from transforms3d.euler import euler2quat
 
 from mani_skill.agents.robots import Fetch, Panda
 from mani_skill.envs.sapien_env import BaseEnv
+from mani_skill.envs.tasks.tabletop.camera_config_utils import (
+    build_tabletop_base_camera_pose,
+)
 from mani_skill.sensors.camera import CameraConfig
 from mani_skill.utils.building import actors
 from mani_skill.utils.registration import register_env
@@ -43,8 +46,8 @@ class PullCubeEnv(BaseEnv):
 
     @property
     def _default_sensor_configs(self):
-        pose = look_at(eye=[-0.5, 0.0, 0.25], target=[0.2, 0.0, -0.5])
-        return [CameraConfig("base_camera", pose, 128, 128, np.pi / 2, 0.01, 100)]
+        pose = build_tabletop_base_camera_pose(__file__, self.num_envs)
+        return [CameraConfig("base_camera", pose, 832, 480, np.pi / 2, 0.01, 30)]
 
     @property
     def _default_human_render_camera_configs(self):

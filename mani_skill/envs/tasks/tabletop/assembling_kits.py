@@ -9,6 +9,9 @@ from transforms3d.euler import euler2quat
 from mani_skill import ASSET_DIR
 from mani_skill.agents.robots import PandaWristCam
 from mani_skill.envs.sapien_env import BaseEnv
+from mani_skill.envs.tasks.tabletop.camera_config_utils import (
+    build_tabletop_base_camera_pose,
+)
 from mani_skill.envs.utils import randomization
 from mani_skill.sensors.camera import CameraConfig
 from mani_skill.utils import common, io_utils, sapien_utils
@@ -87,8 +90,8 @@ class AssemblingKitsEnv(BaseEnv):
 
     @property
     def _default_sensor_configs(self):
-        pose = sapien_utils.look_at([0.2, 0, 0.4], [0, 0, 0])
-        return [CameraConfig("base_camera", pose, 128, 128, np.pi / 2, 0.01, 100)]
+        pose = build_tabletop_base_camera_pose(__file__, self.num_envs)
+        return [CameraConfig("base_camera", pose, 832, 480, np.pi / 2, 0.01, 30)]
 
     @property
     def _default_human_render_camera_configs(self):
