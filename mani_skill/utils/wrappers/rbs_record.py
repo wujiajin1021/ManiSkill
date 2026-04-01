@@ -1,6 +1,8 @@
 import copy
 import json
+import os
 import time
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Optional, Union
@@ -1245,6 +1247,24 @@ class RBSRecordEpisode(gym.Wrapper):
             save (bool): whether to save the trajectory to disk
         """
         flush_count = 0
+
+        def _allocate_unique_camera_dir(traj_id: str) -> Path:
+            root = self.output_dir / "camera_data"
+            root.mkdir(parents=True, exist_ok=True)
+            base_name = traj_id
+            for retry in range(1024):
+                if retry == 0:
+                    name = base_name
+                else:
+                    name = f"{base_name}_p{os.getpid()}_{retry}_{uuid.uuid4().hex[:6]}"
+                p = root / name
+                try:
+                    p.mkdir(parents=False, exist_ok=False)
+                    return p
+                except FileExistsError:
+                    continue
+            raise RuntimeError("Failed to allocate unique camera_data trajectory directory")
+
         if env_idxs_to_flush is None:
             env_idxs_to_flush = np.arange(0, self.num_envs)
         for env_idx in env_idxs_to_flush:
@@ -1257,6 +1277,7 @@ class RBSRecordEpisode(gym.Wrapper):
                 self._episode_id += 1
                 traj_id = "traj_{}".format(self._episode_id)
                 group = self._h5_file.create_group(traj_id, track_order=True)
+                camera_dir = _allocate_unique_camera_dir(traj_id)
 
                 def recursive_add_to_h5py(
                     group: h5py.Group,
@@ -1296,10 +1317,6 @@ class RBSRecordEpisode(gym.Wrapper):
                         cam_poses = cam2world_seq.astype(np.float32)
                         cam_intrinsics = intrinsic_seq.astype(np.float32)
 
-                        camera_dir = self.output_dir / "camera_data" / (
-                            f"traj_{self._episode_id}"
-                        )
-                        camera_dir.mkdir(parents=True, exist_ok=True)
                         np.save(camera_dir / "cam_poses.npy", cam_poses)
                         np.save(camera_dir / "cam_intrinsics.npy", cam_intrinsics)
                         return
@@ -1314,10 +1331,6 @@ class RBSRecordEpisode(gym.Wrapper):
                             return
 
                         if key == "rgb":
-                            camera_dir = self.output_dir / "camera_data" / (
-                                f"traj_{self._episode_id}"
-                            )
-                            camera_dir.mkdir(parents=True, exist_ok=True)
                             rgb_data = np.asarray(data)[start_ptr:end_ptr, env_idx]
                             # save as rgb.mp4 under camera_dir
                             images_to_video(
@@ -1329,10 +1342,6 @@ class RBSRecordEpisode(gym.Wrapper):
                                 verbose=False,
                             )
                         elif key == "depth":
-                            camera_dir = self.output_dir / "camera_data" / (
-                                f"traj_{self._episode_id}"
-                            )
-                            camera_dir.mkdir(parents=True, exist_ok=True)
                             depth_data = np.asarray(data)[start_ptr:end_ptr, env_idx]
                             # remove any singleton channel dim (works for (T,H,W,1) and (T,H,W))
                             depth_data = np.squeeze(depth_data)
@@ -1345,10 +1354,6 @@ class RBSRecordEpisode(gym.Wrapper):
                             # save as depth_video.npy under camera_dir (meters, float16)
                             np.save(camera_dir / "depth_video.npy", depth_data.astype(np.float16))
                         elif key == "segmentation":
-                            camera_dir = self.output_dir / "camera_data" / (
-                                f"traj_{self._episode_id}"
-                            )
-                            camera_dir.mkdir(parents=True, exist_ok=True)
                             seg_data = np.asarray(data)[start_ptr:end_ptr, env_idx]
                             # squeeze trailing channel dim if present (e.g. (T,H,W,1) -> (T,H,W))
                             if seg_data.ndim >= 3 and seg_data.shape[-1] == 1:
@@ -1516,10 +1521,6 @@ class RBSRecordEpisode(gym.Wrapper):
                 dump_json(self._json_path, self._json_data, indent=2)
                 # Also write a per-episode h5 file under camera_data for convenience.
                 try:
-                    camera_dir = self.output_dir / "camera_data" / (
-                        f"traj_{self._episode_id}"
-                    )
-                    camera_dir.mkdir(parents=True, exist_ok=True)
                     per_h5_path = camera_dir / f"{traj_id}.h5"
                     # Copy the episode group from the main h5 file to a per-episode h5 file.
                     with h5py.File(str(per_h5_path), "w") as per_f:
