@@ -362,6 +362,13 @@ def main():
     root = Path(args.root)
     if not root.exists():
         raise FileNotFoundError(f"Root not found: {root}")
+
+    # 支持直接传入单个traj目录（包含 depth_video.npy 或 depth.npy）
+    if (root / "depth_video.npy").exists() or (root / "depth.npy").exists():
+        n = process_folder(root)
+        print(f"Done. Saved {n} files.")
+        return
+
     folders = [str(p) for p in sorted(root.iterdir()) if p.is_dir()]
     total = 0
 

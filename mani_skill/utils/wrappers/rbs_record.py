@@ -1,6 +1,8 @@
 import copy
 import json
 import os
+import subprocess
+import sys
 import time
 import uuid
 from dataclasses import dataclass
@@ -244,6 +246,9 @@ class RBSRecordEpisode(gym.Wrapper):
         record_id_mesh_info: bool = False,
         visualize_pointflow: bool = False,
         pointflow_npy_path: Optional[str] = None,
+        postprocess_camera_data: bool = False,
+        postprocess_workers: int = 19,
+        postprocess_delete_npy: bool = True,
     ) -> None:
         super().__init__(env)
 
@@ -326,6 +331,9 @@ class RBSRecordEpisode(gym.Wrapper):
         self._pointflow_zmin = 0.0
         self._pointflow_zrange = 1.0
         self._pointflow_overlay_disabled_reason: Optional[str] = None
+        self.postprocess_camera_data = postprocess_camera_data
+        self.postprocess_workers = int(postprocess_workers)
+        self.postprocess_delete_npy = postprocess_delete_npy
         if self.visualize_pointflow:
             if self.base_env.gpu_sim_enabled:
                 self.visualize_pointflow = False
@@ -361,6 +369,79 @@ class RBSRecordEpisode(gym.Wrapper):
                     self.render_images.append(self.capture_image())
 
             self.base_env._after_simulation_step = wrapped_after_simulation_step
+
+    def _postprocess_camera_dir(self, camera_dir: Path):
+        if not self.postprocess_camera_data:
+            return
+        done_flag = camera_dir / ".postprocess_done"
+        lock_file = camera_dir / ".postprocess_lock"
+        if done_flag.exists():
+            return
+        try:
+            fd = os.open(str(lock_file), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            os.close(fd)
+        except FileExistsError:
+            return
+
+        try:
+            workspace_root = Path(__file__).resolve().parents[3]
+            convert_script = workspace_root / "convert_camera_depths.py"
+            flow_script = workspace_root / "flow_compress.py"
+            point_script = workspace_root / "point_compress.py"
+            seg_script = workspace_root / "seg_compress.py"
+
+            convert_cmd = [
+                sys.executable,
+                str(convert_script),
+                str(camera_dir),
+                "--workers",
+                "1",
+            ]
+            subprocess.run(convert_cmd, check=True)
+
+            flow_cmd = [
+                sys.executable,
+                str(flow_script),
+                "compress",
+                "--out_dir",
+                str(camera_dir),
+            ]
+            if self.postprocess_delete_npy:
+                flow_cmd.append("--delete_npy")
+            subprocess.run(flow_cmd, check=True)
+
+            point_cmd = [
+                sys.executable,
+                str(point_script),
+                "--mode",
+                "compress",
+                "--seg_dir",
+                str(camera_dir),
+                "--delete-existing",
+            ]
+            subprocess.run(point_cmd, check=True)
+
+            seg_cmd = [
+                sys.executable,
+                str(seg_script),
+                "compress",
+                "--seg-dir",
+                str(camera_dir),
+                "--method",
+                "b2nd",
+            ]
+            if self.postprocess_delete_npy:
+                seg_cmd.append("--delete-source")
+            subprocess.run(seg_cmd, check=True)
+
+            done_flag.write_text("ok\n")
+        except Exception as e:
+            logger.warning(f"camera_dir postprocess failed for {camera_dir}: {e}")
+        finally:
+            try:
+                lock_file.unlink(missing_ok=True)
+            except Exception:
+                pass
 
     @property
     def num_envs(self):
@@ -1537,6 +1618,9 @@ class RBSRecordEpisode(gym.Wrapper):
                                     continue
                 except Exception:
                     logger.warn(f"Failed to write per-episode h5 for {traj_id}")
+
+                self._postprocess_camera_dir(camera_dir)
+
                 if verbose:
                     if flush_count == 1:
                         print(f"Recorded episode {self._episode_id}")

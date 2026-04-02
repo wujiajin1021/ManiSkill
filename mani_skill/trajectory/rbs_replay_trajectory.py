@@ -97,6 +97,13 @@ class Args:
     replay_fps: Optional[float] = None
     """Optional replay visualization FPS cap. When set (e.g. 1, 2, 5), replay sleeps between steps so visualization is slower and easier to inspect."""
 
+    postprocess_camera_data: bool = False
+    """Whether to postprocess each just-saved camera_data/traj_* directory immediately (convert + compression)."""
+    postprocess_workers: int = 19
+    """Workers passed to convert_camera_depths during per-traj postprocess."""
+    postprocess_delete_npy: bool = True
+    """Whether to delete intermediate npy files in flow_compress during per-traj postprocess."""
+
     num_envs: Annotated[int, tyro.conf.arg(aliases=["-n"])] = 1
     """Number of environments to run to replay trajectories. With CPU backends typically this is parallelized via python multiprocessing.
     For parallelized simulation backends like physx_gpu, this is parallelized within a single python process by leveraging the GPU."""
@@ -585,6 +592,9 @@ def main(args: Args):
         record_id_mesh_info=args.record_id_mesh_info,
         visualize_pointflow=args.pointflow_npy is not None,
         pointflow_npy_path=args.pointflow_npy,
+        postprocess_camera_data=args.postprocess_camera_data,
+        postprocess_workers=args.postprocess_workers,
+        postprocess_delete_npy=args.postprocess_delete_npy,
     )
 
     if args.record_id_poses and not args.save_traj:
