@@ -5,6 +5,7 @@ import subprocess
 import sys
 import time
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Optional, Union
@@ -334,6 +335,12 @@ class RBSRecordEpisode(gym.Wrapper):
         self.postprocess_camera_data = postprocess_camera_data
         self.postprocess_workers = int(postprocess_workers)
         self.postprocess_delete_npy = postprocess_delete_npy
+        self._postprocess_executor = (
+            ThreadPoolExecutor(max_workers=1, thread_name_prefix="camera-postprocess")
+            if self.postprocess_camera_data
+            else None
+        )
+        self._postprocess_futures = []
         if self.visualize_pointflow:
             if self.base_env.gpu_sim_enabled:
                 self.visualize_pointflow = False
@@ -442,6 +449,17 @@ class RBSRecordEpisode(gym.Wrapper):
                 lock_file.unlink(missing_ok=True)
             except Exception:
                 pass
+
+    def _submit_postprocess_camera_dir(self, camera_dir: Path):
+        if not self.postprocess_camera_data:
+            return
+        if self._postprocess_executor is None:
+            self._postprocess_camera_dir(camera_dir)
+            return
+        fut = self._postprocess_executor.submit(self._postprocess_camera_dir, camera_dir)
+        self._postprocess_futures.append(fut)
+        # 清理已完成 future，避免列表无限增长
+        self._postprocess_futures = [f for f in self._postprocess_futures if not f.done()]
 
     @property
     def num_envs(self):
@@ -1619,7 +1637,7 @@ class RBSRecordEpisode(gym.Wrapper):
                 except Exception:
                     logger.warn(f"Failed to write per-episode h5 for {traj_id}")
 
-                self._postprocess_camera_dir(camera_dir)
+                self._submit_postprocess_camera_dir(camera_dir)
 
                 if verbose:
                     if flush_count == 1:
@@ -1746,4 +1764,8 @@ class RBSRecordEpisode(gym.Wrapper):
         if self.save_video:
             if self.save_on_reset:
                 self.flush_video()
+
+        if self._postprocess_executor is not None:
+            self._postprocess_executor.shutdown(wait=True)
+
         return super().close()
