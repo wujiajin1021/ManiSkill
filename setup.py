@@ -7,7 +7,7 @@ from pathlib import Path
 from setuptools import find_packages, setup
 
 # update this version when a new official pypi release is made
-__version__ = "3.0.0b22"
+__version__ = "3.0.1"
 
 
 def get_package_version():
@@ -41,9 +41,9 @@ def get_dependencies():
         "imageio",
         "imageio[ffmpeg]",
         "mplib==0.1.1;platform_system=='Linux'",
-        "fast_kinematics==0.2.2;platform_system=='Linux'",
         "IPython",
         "pytorch_kinematics==0.7.6",
+        "defusedxml",
         "nvidia-ml-py",  # gpu monitoring
         "tyro>=0.8.5",  # nice, typed, command line arg parser
         "huggingface_hub",  # we use HF to version control some assets/datasets more easily
