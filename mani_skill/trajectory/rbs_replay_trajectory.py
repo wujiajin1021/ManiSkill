@@ -36,6 +36,8 @@ from mani_skill.utils.wrappers.rbs_record import RBSRecordEpisode
 class Args:
     traj_path: str
     """Path to the trajectory .h5 file to replay"""
+    output_dir: Optional[str] = None
+    """Output directory for saved trajectories. If not specified, uses the directory of the input trajectory file."""
     sim_backend: Annotated[Optional[str], tyro.conf.arg(aliases=["-b"])] = None
     """Which simulation backend to use. Can be 'physx_cpu', 'physx_gpu'. If not specified the backend used is the same as the one used to collect the trajectory data."""
     obs_mode: Annotated[Optional[str], tyro.conf.arg(aliases=["-o"])] = None
@@ -470,7 +472,7 @@ def _main(
 
     # note for maniskill trajectory datasets the general naming format is <trajectory_name>.<obs_mode>.<control_mode>.<sim_backend>.h5
     # If it is called <file_name>.h5 then we assume obs_mode=None, control_mode=pd_joint_pos, and sim_backend=physx_cpu
-    output_dir = os.path.dirname(traj_path)
+    output_dir = args.output_dir if args.output_dir is not None else os.path.dirname(traj_path)
     ori_traj_name = os.path.splitext(os.path.basename(traj_path))[0]
     parts = ori_traj_name.split(".")
     if len(parts) > 1:
